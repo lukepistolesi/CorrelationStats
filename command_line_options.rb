@@ -26,7 +26,6 @@ class CommandLineOptions
 
     @config_column = ''
     cell_coordinates.each_char do |char|
-      puts "Char is #{char}"
       char =~ /[A-Z]/ ? config_column << char : break
     end
 

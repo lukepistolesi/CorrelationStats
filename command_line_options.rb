@@ -14,25 +14,15 @@ class CommandLineOptions
 
     @file_name = command_line_arguments[0]
 
-    splitted_config_coordinates = command_line_arguments[1].split ':'
-    if splitted_config_coordinates.size != 2
+    @config_sheet, cell_coordinates = Helper.coordinates_to_sheet_and_cell command_line_arguments[1]
+
+    if @config_sheet.nil? || cell_coordinates.nil?
       exception_msg =
         "\nThe coordinates for the configuration table are missing" +
         "\nE.g. ConfigurationDataSheet1:F2"
     end
 
-    @config_sheet = splitted_config_coordinates[0]
-    cell_coordinates = splitted_config_coordinates[1].upcase
-
-    @config_column = ''
-    cell_coordinates.each_char do |char|
-      char =~ /[A-Z]/ ? config_column << char : break
-    end
-
-    @config_row = cell_coordinates[config_column.size..-1]
-
-    @config_column_index = Helper.convert_letters_to_index @config_column
-    @config_row_index = Integer(@config_row).to_i - 1
+    @config_column_index, @config_row_index, @config_column, @config_row = Helper.string_coordinates_to_indexes cell_coordinates
   end
 
 end

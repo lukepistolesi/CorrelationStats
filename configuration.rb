@@ -28,6 +28,7 @@ class Configuration
   PROPERTIES = %w(correlation_threshold data_table_start categorized_columns destination rules)
 
   PROPERTIES.each { |prop| attr_reader prop.to_sym }
+  attr_reader :data_sheet_name, :data_column_index, :data_row_index
 
   def initialize(spreadsheet, config_column, config_row)
     config_header = spreadsheet[config_column][config_row]
@@ -37,6 +38,8 @@ class Configuration
 
     last_row_index = load_settings spreadsheet, config_column, config_row
     load_rules spreadsheet, config_column, last_row_index
+    @data_sheet_name, cell_coordinates = Helper.coordinates_to_sheet_and_cell @data_table_start
+    @data_column_index, @data_row_index, _, _ = Helper.string_coordinates_to_indexes cell_coordinates
     validate
   end
 

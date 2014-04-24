@@ -2,6 +2,7 @@ require 'rubyXL'
 require 'ruby2ruby'
 require './command_line_options.rb'
 require './configuration.rb'
+require './correlation_engine.rb'
 
 cmd_line_opts = CommandLineOptions.new ARGV
 
@@ -16,6 +17,9 @@ config_sheet = workbook[cmd_line_opts.config_sheet]
 configuration = Configuration.new config_sheet, cmd_line_opts.config_column_index, cmd_line_opts.config_row_index
 
 puts "Configuration loaded: #{configuration}"
+
+engine = CorrelationEngine.new configuration
+engine.compute_simple_stats workbook
 
 #notnil = sheet.sheet_data.select { |row| !row.nil? }.size
 # rowno = 0

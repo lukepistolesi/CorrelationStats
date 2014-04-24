@@ -1,6 +1,6 @@
 class CorrelationEngine
 
-  attr_reader :configuration, :simple_stats, :data_samples_count
+  attr_reader :configuration, :simple_stats, :data_samples_count, :rule_combinations
 
   def initialize(configuration)
     @configuration = configuration
@@ -44,6 +44,11 @@ class CorrelationEngine
     puts 'Simple stats computed'
   end
 
+  def compute_bayes_correlations(workbook)
+    @rule_combinations = build_rule_combinations.sort
+    compute_probabilities @rule_combinations
+  end
+
   def to_s
     string = 'Simple Stats'
     @simple_stats.each_pair do |column_name, rules_stats|
@@ -72,6 +77,33 @@ class CorrelationEngine
     rules_collection.each_pair do |label, rule|
       column_stats[label][cell_index] = cell_value if rule[:proc].call cell_value
     end
+  end
+
+  def build_rule_combinations()
+    first_column = configuration.rules.keys.first
+    other_columns = configuration.rules.keys - [first_column]
+
+    all_combinations = []
+    configuration.rules[first_column].each_pair do |first_label, rule|
+      combinations = ["#{first_column}:#{first_label}"]
+      other_columns.each do |column_name|
+        new_combinations = []
+        configuration.rules[column_name].keys.each do |current_label|
+          combinations.each { |comb| new_combinations << comb + "|#{column_name}:#{current_label}" }
+        end
+        combinations.concat new_combinations
+      end
+      all_combinations.concat combinations.drop(1)
+    end
+    #Add single combination
+    configuration.rules.each_pair do |column, rules|
+      rules.each_pair { |label, rule| all_combinations << "#{column}:#{label}"}
+    end
+    all_combinations
+  end
+
+  def compute_probabilities(rule_combinations)
+
   end
 
 end

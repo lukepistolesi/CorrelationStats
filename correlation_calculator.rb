@@ -24,6 +24,10 @@ engine.compute_simple_stats workbook
 
 puts engine.to_s
 
+engine.compute_bayes_correlations workbook
+rule_combos = engine.rule_combinations
+puts "#{rule_combos.size} combinations built:\n#{rule_combos.sort}"
+
 #notnil = sheet.sheet_data.select { |row| !row.nil? }.size
 # rowno = 0
 # (0..sheet.sheet_data.size).each do |idx|

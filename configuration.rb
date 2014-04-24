@@ -36,7 +36,7 @@ class Configuration
       raise ArgumentError.new 'Configuration table not found'
     end
 
-    last_row_index = load_settings spreadsheet, config_column, config_row
+    last_row_index = load_settings spreadsheet, config_column, (config_row + 1)
     load_rules spreadsheet, config_column, last_row_index
     @data_sheet_name, cell_coordinates = Helper.coordinates_to_sheet_and_cell @data_table_start
     @data_column_index, @data_row_index, _, _ = Helper.string_coordinates_to_indexes cell_coordinates
@@ -72,17 +72,18 @@ class Configuration
   def load_settings(sheet, col, row)
 
     iterate_till_empty_rows(sheet, col, row) do |current_row_idx|
-
       cell_value = Helper.cell_value sheet, current_row_idx, col
-      return false if is_rule_cell? cell_value
+      if !is_rule_cell? cell_value
+        attribute = cell_value.gsub(' ', '_').downcase
+        value = Helper.cell_value sheet, current_row_idx, col + 1
+        begin value = Float(value); rescue Exception; end
 
-      attribute = cell_value.gsub(' ', '_').downcase
-      value = Helper.cell_value sheet, current_row_idx, col + 1
-      begin value = Float(value); rescue Exception; end
-
-      self.send "#{attribute}=", value
+        self.send "#{attribute}=", value
+        true
+      else
+        false
+      end
     end
-
   end
 
   def load_rules(sheet, col, row)
@@ -118,10 +119,10 @@ class Configuration
   end
 
   def iterate_till_empty_rows(sheet, col, row, skip_empty_rows=true, &block)
-    current_row = row + 1
+    current_row = row
     while true do
       current_cell_empty = Helper.empty_cell? sheet, current_row, col
-      break if current_cell_empty && Helper.empty_cell?(sheet, current_row + 2, col)
+      break if current_cell_empty && Helper.empty_cell?(sheet, current_row + 1, col)
       break if (!current_cell_empty || !skip_empty_rows) && !yield(current_row)
       current_row = current_row + 1
     end
@@ -129,6 +130,7 @@ class Configuration
   end
 
   def create_rule(rule_label, rule_string, current_rules)
+    puts "Create rule for #{rule_label}: #{rule_string}"
     current_rules[rule_label] = { proc: eval("Proc.new { |value| #{rule_string} }"), string: rule_string }
   end
 end

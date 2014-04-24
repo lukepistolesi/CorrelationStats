@@ -1,5 +1,6 @@
 require 'rubyXL'
 require 'ruby2ruby'
+require './numeric.rb'
 require './command_line_options.rb'
 require './configuration.rb'
 require './correlation_engine.rb'
@@ -20,6 +21,8 @@ puts "Configuration loaded: #{configuration}"
 
 engine = CorrelationEngine.new configuration
 engine.compute_simple_stats workbook
+
+puts engine.to_s
 
 #notnil = sheet.sheet_data.select { |row| !row.nil? }.size
 # rowno = 0

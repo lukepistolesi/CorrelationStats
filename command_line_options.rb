@@ -2,7 +2,7 @@ require './helper.rb'
 
 class CommandLineOptions
 
-  attr_reader :file_name, :config_sheet, :config_column, :config_row, :config_column_index, :config_row_index
+  attr_reader :file_name, :config_sheet, :config_column, :config_row, :config_column_idx, :config_row_idx
 
   def initialize(command_line_arguments)
     if command_line_arguments.size != 2
@@ -22,7 +22,7 @@ class CommandLineOptions
         "\nE.g. ConfigurationDataSheet1:F2"
     end
 
-    @config_column_index, @config_row_index, @config_column, @config_row = Helper.string_coordinates_to_indexes cell_coordinates
+    @config_column_idx, @config_row_idx, @config_column, @config_row = Helper.string_coordinates_to_indexes cell_coordinates
   end
 
 end

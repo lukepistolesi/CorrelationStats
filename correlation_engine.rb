@@ -1,6 +1,7 @@
 class CorrelationEngine
 
-  attr_reader :configuration, :simple_stats, :data_samples_count, :rule_combinations, :probabilities
+  attr_reader :configuration, :simple_stats, :data_samples_count,
+              :rule_combinations, :probabilities, :conditionals
 
   def initialize(configuration)
     @configuration = configuration
@@ -45,8 +46,14 @@ class CorrelationEngine
   end
 
   def compute_bayes_correlations(workbook)
-    @rule_combinations = build_rule_combinations.sort
+    puts 'Computing Bayes correlations'
+    puts 'Step 1) Building rule combinations'
+    @rule_combinations = build_rule_combinations(@configuration.rules).sort
+    puts 'Step 2) Computing probabilities'
     compute_probabilities @rule_combinations
+    puts 'Step 3) Computing conditional probabilites'
+    compute_conditional_probabilities @rule_combinations, @probabilities
+    puts 'Bayes correlations computed'
   end
 
   def to_s
@@ -79,12 +86,9 @@ class CorrelationEngine
     end
   end
 
-  def build_rule_combinations()
-    #first_column = configuration.rules.keys.first
-    #other_columns = configuration.rules.keys - [first_column]
-
+  def build_rule_combinations(rules_collection)
     all_combinations = []
-    configuration.rules.each_pair do |root_column, rules|
+    rules_collection.each_pair do |root_column, rules|
       other_columns = configuration.rules.keys - [root_column]
       rules.each_pair do |root_label, rule|
         combinations = ["#{root_column}:#{root_label}"]
@@ -109,10 +113,30 @@ class CorrelationEngine
         col, rule_label = col_and_rule.split ':'
         rule_idxs = @simple_stats[col][rule_label].keys
         intersection = intersection.nil? ? rule_idxs : (intersection & rule_idxs)
+        break if intersection.empty?
       end
       @probabilities[combination] =
         { intersection: intersection, probability: intersection.size.to_f / @data_samples_count.to_f }
     end
   end
 
+  def compute_conditional_probabilities(rule_combinations, probabilities)
+    @conditionals = {}
+    rule_combinations.each do |combination|
+      first_rule_end = combination.index('|') || combination.size
+      first_rule = combination[0..first_rule_end-1]
+      second_rule_combo = combination[first_rule_end+1..-1]
+
+      conditional_prob = 0.0
+      numerator = probabilities[combination][:probability]
+
+      if numerator != 0.0
+        denumerator = probabilities[second_rule_combo].nil? ? 1.0 : probabilities[second_rule_combo][:probability]
+        conditional_prob = numerator / denumerator
+      end
+
+      @conditionals[combination] =
+        { prior: first_rule, posterior: second_rule_combo, probability: conditional_prob}
+    end
+  end
 end

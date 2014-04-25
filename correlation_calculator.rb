@@ -27,22 +27,15 @@ puts engine.to_s
 engine.compute_bayes_correlations workbook
 rule_combos = engine.rule_combinations
 puts "\n#{rule_combos.size} combinations built"
-#puts rule_combos.sort
-puts "\nProbabilities"
-engine.probabilities.keys.sort.each do |rules_string|
-  prob = engine.probabilities[rules_string][:probability]
-  puts "#{rules_string} => #{prob}" if prob != 0.0
+puts "\nConditional Probabilities"
+#engine.conditionals.keys.sort.each do |combination|
+engine.conditionals.sort_by { |comb, results| results[:probability] }.each do |key_val|
+  #results = engine.conditionals[combination]
+  results = key_val[1]
+  posterior = results[:posterior]
+  probability = results[:probability].round(2) * 100
+  unless posterior.nil? || probability == 0.0
+    posterior = posterior.gsub '|', '∩'
+    puts "P(#{results[:prior]}|#{posterior}) = #{probability}%"
+  end
 end
-
-#notnil = sheet.sheet_data.select { |row| !row.nil? }.size
-# rowno = 0
-# (0..sheet.sheet_data.size).each do |idx|
-#   row = sheet.sheet_data[idx]
-#   rowno = rowno + 1 unless row.nil?
-# end
-# puts "Number of rows is #{rowno}"
-
-# (0..sheet.sheet_data.size).each do |idx|
-#   next if (row = sheet.sheet_data[idx]).nil?
-#   puts "Row #{idx}\n  has size #{row.size}\n  Second column cell is #{row[1].value unless row[1].nil?}"
-# end

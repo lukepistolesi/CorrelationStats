@@ -19,13 +19,13 @@ class CorrelationEngine
     data_sheet = workbook[configuration.data_sheet_name]
     puts "Data sheet loaded for '#{configuration.data_sheet_name}': computing simple stats..."
 
-    current_column = configuration.data_column_index
-    header_string = Helper.cell_value data_sheet, configuration.data_row_index, current_column
+    current_column = configuration.data_column_idx
+    header_string = Helper.cell_value data_sheet, configuration.data_row_idx, current_column
 
     while !header_string.nil? do
       puts "Processing column #{header_string}"
 
-      start_row_index = current_row = find_data_series_start data_sheet, configuration.data_row_index + 1, current_column
+      start_row_index = current_row = find_data_series_start data_sheet, configuration.data_row_idx + 1, current_column
       cell_value = Helper.cell_value data_sheet, current_row, current_column
 
       while !cell_value.nil? do
@@ -38,7 +38,7 @@ class CorrelationEngine
       end
 
       current_column = current_column + 1
-      header_string = Helper.cell_value data_sheet, configuration.data_row_index, current_column
+      header_string = Helper.cell_value data_sheet, configuration.data_row_idx, current_column
     end
 
     @data_samples_count = current_row - start_row_index
@@ -65,6 +65,19 @@ class CorrelationEngine
         string.concat "\n\t#{label} => #{stats.size} out of #{@data_samples_count} (#{perc})"
       end
     end
+
+    string.concat "\n\n#{@rule_combinations.size} combinations built"
+
+    string.concat "\n\nConditional probabilities"
+    @conditionals.sort_by { |comb, results| results[:probability] }.each do |key_val|
+      results = key_val[1]
+      posterior = results[:posterior]
+      probability = results[:probability].round(2) * 100
+      unless posterior.nil? || probability == 0.0
+        string.concat "\nP(#{results[:prior]}|#{posterior}) = #{probability}%"
+      end
+    end
+
     string
   end
 
@@ -95,7 +108,7 @@ class CorrelationEngine
         other_columns.each do |column_name|
           new_combinations = []
           configuration.rules[column_name].keys.each do |current_label|
-            combinations.each { |comb| new_combinations << comb + "|#{column_name}:#{current_label}" }
+            combinations.each { |comb| new_combinations << comb + "∩#{column_name}:#{current_label}" }
           end
           combinations.concat new_combinations
         end
@@ -109,7 +122,7 @@ class CorrelationEngine
     @probabilities = {}
     rule_combinations.each do |combination|
       intersection = nil
-      combination.split('|').each do |col_and_rule|
+      combination.split('∩').each do |col_and_rule|
         col, rule_label = col_and_rule.split ':'
         rule_idxs = @simple_stats[col][rule_label].keys
         intersection = intersection.nil? ? rule_idxs : (intersection & rule_idxs)
@@ -123,20 +136,18 @@ class CorrelationEngine
   def compute_conditional_probabilities(rule_combinations, probabilities)
     @conditionals = {}
     rule_combinations.each do |combination|
-      first_rule_end = combination.index('|') || combination.size
-      first_rule = combination[0..first_rule_end-1]
-      second_rule_combo = combination[first_rule_end+1..-1]
+      first_rule, second_rule = Helper.split_combo_rule_in_head_and_tail combination
 
       conditional_prob = 0.0
       numerator = probabilities[combination][:probability]
 
       if numerator != 0.0
-        denumerator = probabilities[second_rule_combo].nil? ? 1.0 : probabilities[second_rule_combo][:probability]
+        denumerator = probabilities[second_rule].nil? ? 1.0 : probabilities[second_rule][:probability]
         conditional_prob = numerator / denumerator
       end
 
       @conditionals[combination] =
-        { prior: first_rule, posterior: second_rule_combo, probability: conditional_prob}
+        { prior: first_rule, posterior: second_rule, probability: conditional_prob}
     end
   end
 end

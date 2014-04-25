@@ -25,10 +25,12 @@ class Configuration
   CONFIGURATION_TABLE_HEADER = 'Configuration'
   CONFIGURATION_TABLE_RULES_HEADER = 'Rules'
 
-  PROPERTIES = %w(correlation_threshold data_table_start categorized_columns destination rules)
+  PROPERTIES = %w(correlation_threshold data_table_start categorized_columns destination destination_file rules)
+  NILLABLE_PROPS = %w(categorized_columns destination_file)
 
   PROPERTIES.each { |prop| attr_reader prop.to_sym }
-  attr_reader :data_sheet_name, :data_column_index, :data_row_index
+  attr_reader :data_sheet_name, :data_column_idx, :data_row_idx,
+              :destination_sheet_name, :destination_column_idx, :destination_row_idx
 
   def initialize(spreadsheet, config_column, config_row)
     config_header = spreadsheet[config_column][config_row]
@@ -36,10 +38,15 @@ class Configuration
       raise ArgumentError.new 'Configuration table not found'
     end
 
-    last_row_index = load_settings spreadsheet, config_column, (config_row + 1)
-    load_rules spreadsheet, config_column, last_row_index
+    last_row_idx = load_settings spreadsheet, config_column, (config_row + 1)
+    load_rules spreadsheet, config_column, last_row_idx
+
     @data_sheet_name, cell_coordinates = Helper.coordinates_to_sheet_and_cell @data_table_start
-    @data_column_index, @data_row_index, _, _ = Helper.string_coordinates_to_indexes cell_coordinates
+    @data_column_idx, @data_row_idx, _, _ = Helper.string_coordinates_to_indexes cell_coordinates
+
+    @destination_sheet_name, cell_coordinates = Helper.coordinates_to_sheet_and_cell @destination
+    @destination_column_idx, @destination_row_idx, _, _ = Helper.string_coordinates_to_indexes cell_coordinates
+
     validate
   end
 
@@ -49,8 +56,9 @@ class Configuration
 
 | Correlation Threshold | #{correlation_threshold}
 | Data Table Start      | #{data_table_start}
-| Categorized Columns   | categorized_columns
-| Destination           | destination
+| Categorized Columns   | #{categorized_columns}
+| Destination           | #{destination}
+| Destination File      | #{destination_file}
     }
     @rules.each_pair do |col_name, rules_hash|
       rules_to_s = %Q{\n| Rules - #{col_name.to_s} |}
@@ -110,7 +118,9 @@ class Configuration
   def validate()
     self.categorized_columns ||= []
     PROPERTIES.each do |prop|
-      raise ArgumentError.new "Configuration Setting #{prop} not set" if self.send(prop.to_sym).nil?
+      if self.send(prop.to_sym).nil? && !NILLABLE_PROPS.include?(prop)
+        raise ArgumentError.new "Configuration Setting #{prop} not set"
+      end
     end
   end
 

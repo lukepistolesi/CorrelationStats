@@ -1,5 +1,7 @@
 class Helper
 
+  @@column_widths = {}
+
   def self.convert_letters_to_index(index_name)
     iteration_index = 0
     column_index = 0
@@ -32,5 +34,36 @@ class Helper
     row = string_coordinates[column.size .. -1]
 
     [Helper.convert_letters_to_index(column), Integer(row).to_i - 1, column, row]
+  end
+
+  def self.split_combo_rule_in_head_and_tail(combo_string)
+    first_rule_end = combo_string.index('∩') || combo_string.size
+    first_rule = combo_string[0..first_rule_end-1]
+    second_rule_combo = combo_string[first_rule_end+1..-1]
+    [first_rule, second_rule_combo]
+  end
+
+  def self.set_cell_data(sheet, row_idx, col_idx, value, opts={change_col_width: true})
+    if opts[:change_col_width]
+      width = @@column_widths[col_idx]
+      value_size = value.to_s.size + 1
+      if width.nil?
+        sheet.change_column_width col_idx, (@@column_widths[col_idx] = value_size)
+      elsif width < value_size
+        sheet.change_column_width col_idx, (@@column_widths[col_idx] = value_size)
+      end
+    end
+
+    if (sheet[row_idx].nil? || (cell = sheet[row_idx][col_idx]).nil?)
+      sheet.add_cell row_idx, col_idx, value.to_s
+    else
+      cell.change_contents value.to_s
+    end
+
+    if fill_color = opts[:fill_color]
+      #worksheet.sheet_data[0][0].change_fill('0ba53d')
+      sheet.sheet_data[row_idx][col_idx].change_fill fill_color
+    end
+    cell
   end
 end

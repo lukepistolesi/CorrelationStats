@@ -26,7 +26,13 @@ puts engine.to_s
 
 engine.compute_bayes_correlations workbook
 rule_combos = engine.rule_combinations
-puts "#{rule_combos.size} combinations built:\n#{rule_combos.sort}"
+puts "\n#{rule_combos.size} combinations built"
+#puts rule_combos.sort
+puts "\nProbabilities"
+engine.probabilities.keys.sort.each do |rules_string|
+  prob = engine.probabilities[rules_string][:probability]
+  puts "#{rules_string} => #{prob}" if prob != 0.0
+end
 
 #notnil = sheet.sheet_data.select { |row| !row.nil? }.size
 # rowno = 0

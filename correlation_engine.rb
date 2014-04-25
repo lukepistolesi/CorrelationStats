@@ -1,6 +1,6 @@
 class CorrelationEngine
 
-  attr_reader :configuration, :simple_stats, :data_samples_count, :rule_combinations
+  attr_reader :configuration, :simple_stats, :data_samples_count, :rule_combinations, :probabilities
 
   def initialize(configuration)
     @configuration = configuration
@@ -80,30 +80,39 @@ class CorrelationEngine
   end
 
   def build_rule_combinations()
-    first_column = configuration.rules.keys.first
-    other_columns = configuration.rules.keys - [first_column]
+    #first_column = configuration.rules.keys.first
+    #other_columns = configuration.rules.keys - [first_column]
 
     all_combinations = []
-    configuration.rules[first_column].each_pair do |first_label, rule|
-      combinations = ["#{first_column}:#{first_label}"]
-      other_columns.each do |column_name|
-        new_combinations = []
-        configuration.rules[column_name].keys.each do |current_label|
-          combinations.each { |comb| new_combinations << comb + "|#{column_name}:#{current_label}" }
+    configuration.rules.each_pair do |root_column, rules|
+      other_columns = configuration.rules.keys - [root_column]
+      rules.each_pair do |root_label, rule|
+        combinations = ["#{root_column}:#{root_label}"]
+        other_columns.each do |column_name|
+          new_combinations = []
+          configuration.rules[column_name].keys.each do |current_label|
+            combinations.each { |comb| new_combinations << comb + "|#{column_name}:#{current_label}" }
+          end
+          combinations.concat new_combinations
         end
-        combinations.concat new_combinations
+        all_combinations.concat combinations
       end
-      all_combinations.concat combinations.drop(1)
-    end
-    #Add single combination
-    configuration.rules.each_pair do |column, rules|
-      rules.each_pair { |label, rule| all_combinations << "#{column}:#{label}"}
     end
     all_combinations
   end
 
   def compute_probabilities(rule_combinations)
-
+    @probabilities = {}
+    rule_combinations.each do |combination|
+      intersection = nil
+      combination.split('|').each do |col_and_rule|
+        col, rule_label = col_and_rule.split ':'
+        rule_idxs = @simple_stats[col][rule_label].keys
+        intersection = intersection.nil? ? rule_idxs : (intersection & rule_idxs)
+      end
+      @probabilities[combination] =
+        { intersection: intersection, probability: intersection.size.to_f / @data_samples_count.to_f }
+    end
   end
 
 end

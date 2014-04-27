@@ -101,20 +101,29 @@ class CorrelationEngine
 
   def build_rule_combinations(rules_collection)
     all_combinations = []
-    rules_collection.each_pair do |root_column, rules|
-      other_columns = configuration.rules.keys - [root_column]
-      rules.each_pair do |root_label, rule|
-        combinations = ["#{root_column}:#{root_label}"]
-        other_columns.each do |column_name|
-          new_combinations = []
-          configuration.rules[column_name].keys.each do |current_label|
-            combinations.each { |comb| new_combinations << comb + "∩#{column_name}:#{current_label}" }
+    threads = []
+    start = Time.now
+    rules_collection.each_with_index do |(root_column, rules), index|
+      threads << Thread.new do
+        other_columns = configuration.rules.keys - [root_column]
+        rules.each_pair do |root_label, rule|
+          combinations = ["#{root_column}:#{root_label}"]
+          other_columns.each do |column_name|
+            new_combinations = []
+            configuration.rules[column_name].keys.each do |current_label|
+              combinations.each { |comb| new_combinations << comb + "∩#{column_name}:#{current_label}" }
+            end
+            combinations.concat new_combinations
           end
-          combinations.concat new_combinations
+          all_combinations.concat combinations
         end
-        all_combinations.concat combinations
       end
     end
+
+    threads.each { |thread| thread.join }
+
+    total_time = ((Time.now - start).to_f / 60.0).round 2
+    puts "Total time to compute rule combinations is #{total_time} minutes"
     all_combinations
   end
 

@@ -26,7 +26,7 @@ class Configuration
   CONFIGURATION_TABLE_RULES_HEADER = 'Rules'
 
   PROPERTIES = %w(correlation_threshold data_table_start categorized_columns destination destination_file rules)
-  NILLABLE_PROPS = %w(categorized_columns destination_file)
+  NILLABLE_PROPS = %w(correlation_threshold categorized_columns destination_file)
 
   PROPERTIES.each { |prop| attr_reader prop.to_sym }
   attr_reader :data_sheet_name, :data_column_idx, :data_row_idx,
@@ -116,7 +116,7 @@ class Configuration
   end
 
   def validate()
-    self.categorized_columns ||= []
+    categorized_columns ||= []
     PROPERTIES.each do |prop|
       if self.send(prop.to_sym).nil? && !NILLABLE_PROPS.include?(prop)
         raise ArgumentError.new "Configuration Setting #{prop} not set"

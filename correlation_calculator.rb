@@ -73,7 +73,7 @@ class CorrelationCalculator
         Helper.set_cell_data result_sheet, cur_row - 1, cur_col, second_rule
       end
       value = key_val[1][:probability]
-      if value != 0.0 || options[:print_zeroes]
+      if (value != 0.0 || options[:print_zeroes]) && value >= @configuration.correlation_threshold/100.0
         value = options[:percentage] ? (value * 100.0).round(2) : value.round(4)
         if max_prob < value && !second_rule.nil?
           max_prob = value
@@ -83,7 +83,10 @@ class CorrelationCalculator
       else
         value = ''
       end
-      Helper.set_cell_data result_sheet, cur_row, cur_col, value
+
+      if value.to_f >= @configuration.correlation_threshold/100.0
+        Helper.set_cell_data result_sheet, cur_row, cur_col, value
+      end
       cur_col = cur_col + 1
     end
 

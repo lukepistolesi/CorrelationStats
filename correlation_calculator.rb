@@ -39,6 +39,13 @@ class CorrelationCalculator
     elsif result_sheet.nil?
       result_sheet = @workbook.add_worksheet @configuration.destination_sheet_name
     end
+    puts "Saving results to destination"
+    done = batch_size = 0
+    batch_idx = 1
+    total_conditionals = engine.conditionals.size
+    batch_size = total_conditionals / 20
+    next_target = batch_size * batch_idx
+
     cur_column_name = ''
     cur_label = ''
     rule_label_counter = 0
@@ -87,6 +94,14 @@ class CorrelationCalculator
       if value.to_f >= @configuration.correlation_threshold/100.0
         Helper.set_cell_data result_sheet, cur_row, cur_col, value
       end
+
+      done = done + 1
+      if done >= next_target
+        next_target = batch_size * batch_idx
+        batch_idx = batch_idx + 1
+        puts "Probabilities batch saved: #{done.to_f.percent_of(total_conditionals).round 2}"
+      end
+
       cur_col = cur_col + 1
     end
 

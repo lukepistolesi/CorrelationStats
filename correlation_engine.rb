@@ -1,3 +1,5 @@
+require 'objspace'
+
 class CorrelationEngine
 
   attr_reader :configuration, :simple_stats, :data_samples_count,
@@ -9,7 +11,8 @@ class CorrelationEngine
     configuration.rules.each_pair do |column_name, rules|
       @simple_stats[column_name] = { }
       rules.each_pair do |label, rule|
-        @simple_stats[column_name][label] = { }
+        #@simple_stats[column_name][label] = { }
+        @simple_stats[column_name][label] = []
       end
     end
   end
@@ -22,26 +25,26 @@ class CorrelationEngine
     current_column = configuration.data_column_idx
     header_string = Helper.cell_value data_sheet, configuration.data_row_idx, current_column
 
-    while !header_string.nil? do
+    start_row_index = current_row = find_data_series_start data_sheet, configuration.data_row_idx + 1, current_column
+    columns_count = find_colums_extent data_sheet, configuration.data_row_idx, configuration.data_column_idx
+    @data_samples_count = find_data_series_extent data_sheet, start_row_index, configuration.data_column_idx, columns_count
+
+    puts "Data extent indexes row #{start_row_index} -- col #{configuration.data_column_idx}  to  row #{start_row_index + @data_samples_count} -- col #{configuration.data_column_idx + columns_count}"
+
+    (configuration.data_column_idx..configuration.data_column_idx + columns_count).each_with_index do |col_idx|
+      header_string = Helper.cell_value data_sheet, configuration.data_row_idx, col_idx
       puts "Processing column #{header_string}"
 
-      start_row_index = current_row = find_data_series_start data_sheet, configuration.data_row_idx + 1, current_column
-      cell_value = Helper.cell_value data_sheet, current_row, current_column
-
-      while !cell_value.nil? do
+      (start_row_index..start_row_index + @data_samples_count - 1).each_with_index do |row_idx|
         rules = configuration.rules[header_string]
 
-        compute_simple_stats_for_cell cell_value, current_row, header_string, rules unless rules.nil?
-
-        current_row = current_row + 1
-        cell_value = Helper.cell_value data_sheet, current_row, current_column
+        cell_value = Helper.cell_value data_sheet, row_idx, col_idx
+        compute_simple_stats_for_cell cell_value, row_idx, header_string, rules unless rules.nil?
       end
 
-      current_column = current_column + 1
       header_string = Helper.cell_value data_sheet, configuration.data_row_idx, current_column
     end
 
-    @data_samples_count = current_row - start_row_index
     puts 'Simple stats computed'
   end
 
@@ -73,7 +76,7 @@ class CorrelationEngine
       results = key_val[1]
       posterior = results[:posterior]
       probability = results[:probability].round(2) * 100
-      unless posterior.nil? || probability == 0.0
+      unless posterior.nil? || probability <= 50.0 || posterior.count('∩') > 1
         string.concat "\nP(#{results[:prior]}|#{posterior}) = #{probability}%"
       end
     end
@@ -84,6 +87,14 @@ class CorrelationEngine
 
   private
 
+  def find_colums_extent(data_sheet, headers_row, start_col)
+    cur_col = start_col
+    while !Helper.cell_value(data_sheet, headers_row, cur_col).nil?
+      cur_col = cur_col + 1
+    end
+    (cur_col - start_col) - 1
+  end
+
   def find_data_series_start(data_sheet, row, col)
     begin
       cell_value = Helper.cell_value data_sheet, row, col
@@ -91,11 +102,23 @@ class CorrelationEngine
     row
   end
 
+  def find_data_series_extent(data_sheet, row, col, columns_count)
+    cur_row = row
+    begin
+      empty_cells = 0
+      (col..col + columns_count).each_with_index do |cur_col|
+        value = Helper.cell_value(data_sheet, cur_row, cur_col)
+        empty_cells = empty_cells + 1 if value.nil?
+      end
+      cur_row = cur_row + 1
+    end while empty_cells < columns_count
+    cur_row - row - 1
+  end
+
   def compute_simple_stats_for_cell(cell_value, cell_index, header_string, rules_collection)
     column_stats = @simple_stats[header_string]
-
     rules_collection.each_pair do |label, rule|
-      column_stats[label][cell_index] = cell_value if rule[:proc].call cell_value
+      column_stats[label] << cell_index if !cell_value.nil? && rule[:proc].call(cell_value)
     end
   end
 
@@ -128,21 +151,64 @@ class CorrelationEngine
   end
 
   def compute_probabilities(rule_combinations)
+    puts "Combinations of rules to compute: #{rule_combinations.size.format_thousands}"
     @probabilities = {}
+    @probabilities_cache_not_hit = 0
+    intersection = []
+    first_rule = last_rules = nil
+    done = batch_size = 0
+    batch_idx = 1
+    total_rules = rule_combinations.size
+    batch_size = total_rules / 20
+    next_target = batch_size * batch_idx
+    start = Time.now
+
     rule_combinations.each do |combination|
-      intersection = nil
-      combination.split('∩').each do |col_and_rule|
-        col, rule_label = col_and_rule.split ':'
-        rule_idxs = @simple_stats[col][rule_label].keys
-        intersection = intersection.nil? ? rule_idxs : (intersection & rule_idxs)
-        break if intersection.empty?
+      inter_idx = combination.index('∩')
+      first_rule = combination[0..inter_idx.to_i-1]
+      intersection = compute_intersection_and_prob(first_rule) if @probabilities[first_rule].nil?
+      if (last_rules = combination[first_rule.size + 1.. -1])
+        #intersection = intersection & compute_intersection_and_prob(last_rules)
+        intersection = Helper.array_intersection intersection, compute_intersection_and_prob(last_rules)
       end
-      @probabilities[combination] =
+      @probabilities[combination] ||=
         { intersection: intersection, probability: intersection.size.to_f / @data_samples_count.to_f }
+
+      done = done + 1
+      if done >= next_target
+        next_target = batch_size * batch_idx
+        batch_idx = batch_idx + 1
+        puts "Combination batch computed: #{done.to_f.percent_of(total_rules).round 2}"
+      end
     end
+
+    total_time = ((Time.now - start).to_f / 60.0).round 2
+    puts "Total time to compute simple probabilities is #{total_time} minutes"
+    puts "Cached probabilities hits #{(total_rules - @probabilities_cache_not_hit).percent_of(total_rules).round 2}%"
+  end
+
+  def compute_intersection_and_prob(combination)
+    return @probabilities[combination][:intersection] if @probabilities[combination]
+    @probabilities_cache_not_hit = @probabilities_cache_not_hit + 1
+    intersection = nil
+    combination.split('∩').each do |col_and_rule|
+      col, rule_label = col_and_rule.split ':'
+      rule_idxs = @simple_stats[col][rule_label]
+      #intersection = intersection.nil? ? rule_idxs : (intersection & rule_idxs)
+      intersection = intersection.nil? ? rule_idxs : Helper.array_intersection(intersection, rule_idxs)
+      break if intersection.empty?
+    end
+    @probabilities[combination] =
+      { intersection: intersection, probability: intersection.size.to_f / @data_samples_count.to_f }
+    intersection
   end
 
   def compute_conditional_probabilities(rule_combinations, probabilities)
+    done = batch_size = 0
+    batch_idx = 1
+    total_rules = rule_combinations.size
+    batch_size = total_rules / 20
+
     @conditionals = {}
     rule_combinations.each do |combination|
       first_rule, second_rule = Helper.split_combo_rule_in_head_and_tail combination
@@ -157,6 +223,12 @@ class CorrelationEngine
 
       @conditionals[combination] =
         { prior: first_rule, posterior: second_rule, probability: conditional_prob}
+
+      done = done + 1
+      if done >= batch_size * batch_idx
+        batch_idx = batch_idx + 1
+        puts "Combination batch computed: #{done.to_f.percent_of(total_rules).round 2}"
+      end
     end
   end
 end

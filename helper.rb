@@ -66,4 +66,20 @@ class Helper
     end
     cell
   end
+
+  def self.array_intersection(array1, array2)
+    return [] if (array1.empty? || array2.empty?) || (array1.first > array2.last) || (array1.last < array2.first)
+
+    intersection = []
+    array1.each do |a1|
+      return intersection if array2.empty? || a1 > array2.last
+      array2.each do |a2|
+        if a1 == a2
+          intersection << a2
+          break
+        end
+      end
+    end
+    intersection
+  end
 end

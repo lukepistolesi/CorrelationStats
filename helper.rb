@@ -37,7 +37,7 @@ class Helper
   end
 
   def self.split_combo_rule_in_head_and_tail(combo_string)
-    first_rule_end = combo_string.index('∩') || combo_string.size
+    first_rule_end = combo_string.index('&') || combo_string.size
     first_rule = combo_string[0..first_rule_end-1]
     second_rule_combo = combo_string[first_rule_end+1..-1]
     [first_rule, second_rule_combo]

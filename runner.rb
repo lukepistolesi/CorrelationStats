@@ -13,7 +13,7 @@ calculator.load_configuration
 calculator.compute_conditional_probabilities
 
 puts "\nRESULTS\n"
-puts calculator
+#puts calculator
 
-result = calculator.save_results_in_workbook create_result_sheet: true, save_workbook: true, percentage: true
-puts "Results saved in #{result}"
+#result = calculator.save_results_in_workbook create_result_sheet: true, save_workbook: true, percentage: true
+#puts "Results saved in #{result}"

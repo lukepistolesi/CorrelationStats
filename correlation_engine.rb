@@ -1,4 +1,4 @@
-require 'objspace'
+require 'thread_safe'
 
 class CorrelationEngine
 
@@ -51,12 +51,14 @@ class CorrelationEngine
   def compute_bayes_correlations(workbook)
     puts 'Computing Bayes correlations'
     puts 'Step 1) Building rule combinations'
+    start = Time.now
     @rule_combinations = build_rule_combinations(@configuration.rules).sort
     puts 'Step 2) Computing probabilities'
     compute_probabilities @rule_combinations
     puts 'Step 3) Computing conditional probabilites'
     compute_conditional_probabilities @rule_combinations, @probabilities
-    puts 'Bayes correlations computed'
+    total_seconds = Time.now - start
+    puts "Bayes correlations computed in #{total_seconds} seconds (#{total_seconds.to_f/60.0} minutes)"
   end
 
   def to_s
@@ -76,7 +78,7 @@ class CorrelationEngine
       results = key_val[1]
       posterior = results[:posterior]
       probability = results[:probability].round(2) * 100
-      unless posterior.nil? || probability <= 50.0 || posterior.count('∩') > 1
+      unless posterior.nil? || probability <= 50.0 || posterior.count('&') > 1
         string.concat "\nP(#{results[:prior]}|#{posterior}) = #{probability}%"
       end
     end
@@ -123,7 +125,7 @@ class CorrelationEngine
   end
 
   def build_rule_combinations(rules_collection)
-    all_combinations = []
+    all_combinations = ThreadSafe::Array.new
     threads = []
     start = Time.now
     rules_collection.each_with_index do |(root_column, rules), index|
@@ -134,7 +136,7 @@ class CorrelationEngine
           other_columns.each do |column_name|
             new_combinations = []
             configuration.rules[column_name].keys.each do |current_label|
-              combinations.each { |comb| new_combinations << comb + "∩#{column_name}:#{current_label}" }
+              combinations.each { |comb| new_combinations << comb + "&#{column_name}:#{current_label}" }
             end
             combinations.concat new_combinations
           end
@@ -145,8 +147,8 @@ class CorrelationEngine
 
     threads.each { |thread| thread.join }
 
-    total_time = ((Time.now - start).to_f / 60.0).round 2
-    puts "Total time to compute rule combinations is #{total_time} minutes"
+    total_time = Time.now - start
+    puts "Total time to compute rule combinations is #{total_time} seconds (#{total_time.to_f/60.0} minutes)"
     all_combinations
   end
 
@@ -156,34 +158,30 @@ class CorrelationEngine
     @probabilities_cache_not_hit = 0
     intersection = []
     first_rule = last_rules = nil
-    done = batch_size = 0
-    batch_idx = 1
+    done = 0
     total_rules = rule_combinations.size
-    batch_size = total_rules / 20
-    next_target = batch_size * batch_idx
+    batch_size = total_rules / 10
     start = Time.now
 
     rule_combinations.each do |combination|
-      inter_idx = combination.index('∩')
+      inter_idx = combination.index('&')
       first_rule = combination[0..inter_idx.to_i-1]
       intersection = compute_intersection_and_prob(first_rule) if @probabilities[first_rule].nil?
       if (last_rules = combination[first_rule.size + 1.. -1])
-        #intersection = intersection & compute_intersection_and_prob(last_rules)
-        intersection = Helper.array_intersection intersection, compute_intersection_and_prob(last_rules)
+        #intersection = Helper.array_intersection intersection, compute_intersection_and_prob(last_rules)
+        intersection = intersection & compute_intersection_and_prob(last_rules)
       end
       @probabilities[combination] ||=
         { intersection: intersection, probability: intersection.size.to_f / @data_samples_count.to_f }
 
       done = done + 1
-      if done >= next_target
-        next_target = batch_size * batch_idx
-        batch_idx = batch_idx + 1
+      if done % batch_size == 0
         puts "Combination batch computed: #{done.to_f.percent_of(total_rules).round 2}"
       end
     end
 
-    total_time = ((Time.now - start).to_f / 60.0).round 2
-    puts "Total time to compute simple probabilities is #{total_time} minutes"
+    total_time = Time.now - start
+    puts "Total time to compute simple probabilities is #{total_time} seconds (#{total_time.to_f/60.0} minutes)"
     puts "Cached probabilities hits #{(total_rules - @probabilities_cache_not_hit).percent_of(total_rules).round 2}%"
   end
 
@@ -191,11 +189,11 @@ class CorrelationEngine
     return @probabilities[combination][:intersection] if @probabilities[combination]
     @probabilities_cache_not_hit = @probabilities_cache_not_hit + 1
     intersection = nil
-    combination.split('∩').each do |col_and_rule|
+    combination.split('&').each do |col_and_rule|
       col, rule_label = col_and_rule.split ':'
       rule_idxs = @simple_stats[col][rule_label]
-      #intersection = intersection.nil? ? rule_idxs : (intersection & rule_idxs)
-      intersection = intersection.nil? ? rule_idxs : Helper.array_intersection(intersection, rule_idxs)
+      intersection = intersection.nil? ? rule_idxs : (intersection & rule_idxs)
+      #intersection = intersection.nil? ? rule_idxs : Helper.array_intersection(intersection, rule_idxs)
       break if intersection.empty?
     end
     @probabilities[combination] =
@@ -204,31 +202,44 @@ class CorrelationEngine
   end
 
   def compute_conditional_probabilities(rule_combinations, probabilities)
-    done = batch_size = 0
-    batch_idx = 1
     total_rules = rule_combinations.size
-    batch_size = total_rules / 20
+    batches = 12
+    batch_size = (total_rules / batches) + 1
+    done = 0
 
-    @conditionals = {}
-    rule_combinations.each do |combination|
-      first_rule, second_rule = Helper.split_combo_rule_in_head_and_tail combination
+    start = Time.now
+    @conditionals = ThreadSafe::Hash.new
+    threads = []
+    (0..batches-1).each_with_index do |idx|
+      threads << Thread.new do
+        local_conditionals = {}
+        rule_combinations[idx*batch_size..(idx+1)*batch_size - 1].each do |combination|
+          first_rule, second_rule = Helper.split_combo_rule_in_head_and_tail combination
 
-      conditional_prob = 0.0
-      numerator = probabilities[combination][:probability]
+          conditional_prob = 0.0
+          numerator = probabilities[combination][:probability]
 
-      if numerator != 0.0
-        denumerator = probabilities[second_rule].nil? ? 1.0 : probabilities[second_rule][:probability]
-        conditional_prob = numerator / denumerator
-      end
+          if numerator != 0.0
+            denumerator = probabilities[second_rule].nil? ? 1.0 : probabilities[second_rule][:probability]
+            conditional_prob = numerator / denumerator
+          end
 
-      @conditionals[combination] =
-        { prior: first_rule, posterior: second_rule, probability: conditional_prob}
+          local_conditionals[combination] =
+            { prior: first_rule, posterior: second_rule, probability: conditional_prob}
 
-      done = done + 1
-      if done >= batch_size * batch_idx
-        batch_idx = batch_idx + 1
-        puts "Combination batch computed: #{done.to_f.percent_of(total_rules).round 2}"
+          done = done + 1
+          if done % batch_size == 0
+            puts "Combination batch computed: #{done.to_f.percent_of(total_rules).round 2}"
+          end
+        end
+        @conditionals.merge! local_conditionals
       end
     end
+
+    threads.each { |thread| thread.join }
+
+    total_time = Time.now - start
+    puts "Tot comb #{rule_combinations.size} -- computed #{@conditionals.size}"
+    puts "Total time to compute conditional probabilities is #{total_time} seconds (#{total_time.to_f/60.0} minutes)"
   end
 end
